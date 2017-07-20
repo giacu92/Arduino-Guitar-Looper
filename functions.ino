@@ -182,11 +182,14 @@ void normalMode()
     //Genero l'indirizzo per la lettura di BANK e PATCH
     address = address_generator(currentBANK, currentPATCH);
     
-    //Leggo l'indirizzo e tiro fuori i dati:
+    //Leggo l'indirizzo e tiro fuori i dati
     signals = readEEPROM(disk, address);
 
-    //Attivo i segnali:
+    //Attivo i segnali
     switchON(signals);
+
+    //Salvo address nello slot di boot
+    writeEEPROM(disk, 0x00, address);
 
     //Imposto change a false
     change = false;
