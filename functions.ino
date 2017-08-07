@@ -1,14 +1,35 @@
 void bootUP()
 {
+  #ifdef DEBUG
+    Serial.println("\nBOOT-UP\t---");
+  #endif
+  
   //Leggo lastADDRESS all'indirizzo 0x00:
   unsigned int lastADDRESS = readEEPROM(disk, 0x00);
+
+  #ifdef DEBUG
+    Serial.print("lastADDRESS: ");
+    Serial.println(lastADDRESS, BIN);
+  #endif
 
   //Imposto current_BANK e current_PATCH
   currentBANK  = ((lastADDRESS-8) & 0x3C) >> 2; // (address & 0011 1100) >> 2
   currentPATCH = ((lastADDRESS-8) & 0x03) +  1; // (address & 0000 0011) +  1 per avere un conteggio a partire da 1 delle patch come da pedaliera
 
+  #ifdef DEBUG
+    Serial.print("currentBANK: ");
+    Serial.println(currentBANK);
+    Serial.print("currentPATCH: ");
+    Serial.println(currentPATCH);
+  #endif
+
   //Leggo &ADD e tiro fuori i dati:
   signals = readEEPROM(disk, lastADDRESS);
+
+  #ifdef DEBUG
+    Serial.print("signals: ");
+    Serial.println(signals, BIN);
+  #endif
 
   //Attivo i segnali:
   switchON(signals);
@@ -18,6 +39,10 @@ void bootUP()
 
   //Stato macchina = NORMAL_MODE
   STATO = NORMAL_MODE;
+
+  #ifdef DEBUG
+    Serial.println("\t---");
+  #endif
 }
 
 //Ritorna l'indirizzo a partire da bank e patch:
@@ -29,7 +54,7 @@ unsigned int address_generator(byte _bank, byte _patch)
 //Accende i segnali relativi ai dati in ingresso
 void switchON(unsigned int _signals)
 {
-  PORTB &= _signals;
+  PORTD &= _signals;
 }
 
 //Modalità di program
@@ -43,7 +68,7 @@ void programMode()
   while(digitalRead(PGM_SAVEpin) == HIGH) {}
 
   //Dichiaro alcune variabili
-  bool lastButtonState = LOW;
+  bool lastButtonState = false;
   bool save = false;
   unsigned int _signals = signals;
 
@@ -64,9 +89,15 @@ void programMode()
     }
     else if (digitalRead(loop3pin == HIGH))
     {
+      do{} while(loop3pin == HIGH);
+      
       lastButtonState = HIGH;
       delay(50);
       bitWrite(_signals, 3, !bitRead(_signals, 3)); //Scrivo l'inverso del valore su loop1 in signals
+
+      #ifdef DEBUG
+        Serial.println("signals: " + signals);
+      #endif
     }
     else if (digitalRead(loop4pin == HIGH))
     {
@@ -82,7 +113,7 @@ void programMode()
     }
     else if //Se sono qui ho voluto modificare, allora applico sui relè
     (
-      lastButtonState      == HIGH &&
+      lastButtonState      == true &&
       digitalRead(ABpin    == LOW) &&
       digitalRead(loop1pin == LOW) &&
       digitalRead(loop2pin == LOW) &&
@@ -115,6 +146,10 @@ void programMode()
 
   //Vado in Normal Mode
   STATO = NORMAL_MODE;
+
+  #ifdef DEBUG
+    Serial.println("NORMAL MODE ---");
+  #endif
 }
 
 //Modalità normale
@@ -122,29 +157,41 @@ void normalMode()
 {
   bool change = false;
   bool pgm_mode = false;
-  
+
+  #ifdef DEBUG //non faccio niente perchè TX ed RX sono busy in debug
+    ;
+  #else
   if(digitalRead(loop1pin) == HIGH && currentPATCH != 1)
   {
-    currentPATCH == 1;
-
+    currentPATCH = 1;
     change = true;
     do{} while(digitalRead(loop1pin) == HIGH); //Aspetto di rilasciare il pin
   }
   if(digitalRead(loop2pin) == HIGH && currentPATCH != 2)
   {
-    currentPATCH == 2;
+    currentPATCH = 2;
     change = true;
     do{} while(digitalRead(loop2pin) == HIGH); //Aspetto di rilasciare il pin
   }
+  #endif
+  
   if(digitalRead(loop3pin) == HIGH && currentPATCH != 3)
   {
-    currentPATCH == 3;
+    #ifdef DEBUG
+      Serial.println("- loop3pin pressed");
+    #endif
+    
+    currentPATCH = 3;
     change = true;
     do{} while(digitalRead(loop3pin) == HIGH); //Aspetto di rilasciare il pin
   }
   if(digitalRead(loop4pin) == HIGH && currentPATCH != 4)
   {
-    currentPATCH == 4;
+    #ifdef DEBUG
+      Serial.println("- loop4pin pressed");
+    #endif
+    
+    currentPATCH = 4;
     change = true;
     do{} while(digitalRead(loop4pin) == HIGH); //Aspetto di rilasciare il pin
   }
@@ -159,26 +206,41 @@ void normalMode()
   
   if(digitalRead(bankUPpin) == HIGH)
   {
+    #ifdef DEBUG
+      Serial.println("- bankUP pressed");
+    #endif
+    do{} while(digitalRead(bankUPpin) == HIGH); //Aspetto di rilasciare il pin
+    
     if(currentBANK < 10)
     {
       currentBANK += 1;
       change = true;
     }
-    do{} while(digitalRead(bankUPpin) == HIGH); //Aspetto di rilasciare il pin
   }
   if(digitalRead(bankDWNpin) == HIGH)
   {
+    #ifdef DEBUG
+      Serial.println("- bankDWN pressed");
+    #endif
+    do{} while(digitalRead(bankDWNpin) == HIGH); //Aspetto di rilasciare il pin
+   
     if(currentBANK > 0)
     {
       currentBANK -= 1;
       change = true;
     }
-    do{} while(digitalRead(bankUPpin) == HIGH); //Aspetto di rilasciare il pin
   }
 
   //Se devo leggere la EEPROM perchè ho cambiato banco o patch
   if(change == true)
   {
+    #ifdef DEBUG
+      Serial.print("currentBANK: ");
+      Serial.println(currentBANK);
+      Serial.print("currentPATCH: ");
+      Serial.println(currentPATCH);
+    #endif
+  
     //Genero l'indirizzo per la lettura di BANK e PATCH
     address = address_generator(currentBANK, currentPATCH);
     
@@ -210,7 +272,15 @@ void normalMode()
       }
       else pgm_mode = true;
     }
-    if (pgm_mode == true) STATO = PROGRAM_MODE;
+    if (pgm_mode == true)
+    {
+      STATO = PROGRAM_MODE;
+
+      #ifdef DEBUG
+        Serial.println("\n\n PROGRAM MODE ---");
+      #endif
+    }
+    
   }
 }
 
